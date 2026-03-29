@@ -1,5 +1,17 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import Navbar from "../components/Navbar";
+import merchantData from "../data/merchantData.json";
+import {
+  ResponsiveContainer,
+  LineChart,
+  Line,
+  CartesianGrid,
+  XAxis,
+  YAxis,
+  Tooltip,
+  BarChart,
+  Bar,
+} from "recharts";
 
 const LANGUAGES = ["English", "Hindi", "Tamil", "Bengali", "Telugu", "Spanish", "French"];
 
@@ -20,13 +32,6 @@ const LANGUAGE_CODES = {
   Spanish: "es-ES",
   French: "fr-FR",
 };
-
-const INSIGHT_CARDS = [
-  { title: "Sales Today", value: "₹12,450", icon: "💰", note: "+12% from yesterday" },
-  { title: "Peak Hour", value: "6:00 PM", icon: "⏰", note: "Highest customer rush" },
-  { title: "Top Category", value: "Snacks", icon: "📦", note: "Best performing today" },
-  { title: "Repeat Users", value: "38%", icon: "🔁", note: "Loyal customer share" },
-];
 
 function WaveformBars({ active }) {
   return (
@@ -61,6 +66,83 @@ function AISummaryPage() {
   useEffect(() => {
     return () => {
       window.speechSynthesis.cancel();
+    };
+  }, []);
+
+  const analytics = useMemo(() => {
+    const txns = merchantData.transactions || [];
+    const dailySales = merchantData.dailySales || [];
+    const inventory = merchantData.inventory || [];
+    const merchantInfo = merchantData.merchantInfo || {};
+
+    const totalSales = txns.reduce((sum, t) => sum + t.amount, 0);
+
+    const repeatCustomers = txns.filter((t) => t.customerType === "repeat").length;
+    const repeatPct = txns.length ? Math.round((repeatCustomers / txns.length) * 100) : 0;
+
+    const hourCounts = {};
+    txns.forEach((t) => {
+      const hour = t.time?.split(":")[0];
+      hourCounts[hour] = (hourCounts[hour] || 0) + 1;
+    });
+    const peakHourKey = Object.keys(hourCounts).reduce(
+      (a, b) => (hourCounts[a] > hourCounts[b] ? a : b),
+      Object.keys(hourCounts)[0] || "18"
+    );
+    const peakHour = `${peakHourKey}:00`;
+
+    const categoryRevenue = {};
+    txns.forEach((t) => {
+      const cat = t.category || "Other";
+      categoryRevenue[cat] = (categoryRevenue[cat] || 0) + t.amount;
+    });
+
+    const topCategory =
+      Object.keys(categoryRevenue).reduce(
+        (a, b) => (categoryRevenue[a] > categoryRevenue[b] ? a : b),
+        Object.keys(categoryRevenue)[0] || "General"
+      );
+
+    const lowStockCount = inventory.filter((item) => item.stock < item.reorderLevel).length;
+
+    const categoryChartData = Object.entries(categoryRevenue).map(([name, revenue]) => ({
+      name,
+      revenue,
+    }));
+
+    const insightCards = [
+      {
+        title: "Sales Today",
+        value: `₹${totalSales.toLocaleString("en-IN")}`,
+        icon: "💰",
+        note: merchantInfo.name || "Store Revenue",
+      },
+      {
+        title: "Peak Hour",
+        value: peakHour,
+        icon: "⏰",
+        note: "Highest customer rush",
+      },
+      {
+        title: "Top Category",
+        value: topCategory,
+        icon: "📦",
+        note: "Best revenue category",
+      },
+      {
+        title: "Repeat Users",
+        value: `${repeatPct}%`,
+        icon: "🔁",
+        note: `${repeatCustomers} loyal customers`,
+      },
+    ];
+
+    return {
+      insightCards,
+      dailySales,
+      categoryChartData,
+      lowStockCount,
+      merchantInfo,
     };
   }, []);
 
@@ -154,8 +236,8 @@ function AISummaryPage() {
       <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
         <Navbar />
 
-        <div className="p-4 sm:p-6 max-w-6xl mx-auto">
-          {/* HERO HEADER */}
+        <div className="p-4 sm:p-6 max-w-7xl mx-auto">
+          {/* HERO */}
           <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 p-8 text-white shadow-xl mb-8">
             <div className="absolute top-0 right-0 w-72 h-72 bg-white/10 rounded-full blur-3xl -translate-y-20 translate-x-20" />
             <div className="absolute bottom-0 left-0 w-52 h-52 bg-cyan-300/10 rounded-full blur-3xl translate-y-20 -translate-x-10" />
@@ -168,27 +250,15 @@ function AISummaryPage() {
                 VyapaarSathi <span className="text-cyan-200">AI</span>
               </h1>
               <p className="mt-3 text-blue-100 max-w-2xl text-sm sm:text-base leading-relaxed">
-                Your multilingual business assistant for store insights, stock suggestions,
-                customer trends, and voice-enabled decision support.
+                AI-powered multilingual business assistant with real merchant insights,
+                voice playback, and smart store analytics.
               </p>
-
-              <div className="mt-6 flex flex-wrap gap-3">
-                <div className="bg-white/15 backdrop-blur-md px-4 py-2 rounded-full text-sm border border-white/20">
-                  🌐 Multilingual Support
-                </div>
-                <div className="bg-white/15 backdrop-blur-md px-4 py-2 rounded-full text-sm border border-white/20">
-                  🔊 Voice Enabled
-                </div>
-                <div className="bg-white/15 backdrop-blur-md px-4 py-2 rounded-full text-sm border border-white/20">
-                  📈 Business Insights
-                </div>
-              </div>
             </div>
           </div>
 
-          {/* INSIGHT CARDS */}
+          {/* REAL INSIGHT CARDS */}
           <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-8">
-            {INSIGHT_CARDS.map((card) => (
+            {analytics.insightCards.map((card) => (
               <div
                 key={card.title}
                 className="bg-white/80 backdrop-blur-xl border border-white/60 shadow-sm rounded-2xl p-5 hover:shadow-md transition"
@@ -205,10 +275,50 @@ function AISummaryPage() {
             ))}
           </div>
 
+          {/* CHARTS */}
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 mb-8">
+            <div className="bg-white/90 backdrop-blur-xl rounded-3xl shadow-sm border border-gray-200 p-5">
+              <div className="mb-4">
+                <h3 className="text-lg font-semibold text-gray-900">Daily Sales Trend</h3>
+                <p className="text-sm text-gray-500">Track performance across the week</p>
+              </div>
+              <div className="h-72">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={analytics.dailySales}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="day" />
+                    <YAxis />
+                    <Tooltip />
+                    <Line type="monotone" dataKey="sales" strokeWidth={3} />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+
+            <div className="bg-white/90 backdrop-blur-xl rounded-3xl shadow-sm border border-gray-200 p-5">
+              <div className="mb-4">
+                <h3 className="text-lg font-semibold text-gray-900">Category Revenue</h3>
+                <p className="text-sm text-gray-500">Which product segments are performing best</p>
+              </div>
+              <div className="h-72">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={analytics.categoryChartData}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="name" />
+                    <YAxis />
+                    <Tooltip />
+                    <Bar dataKey="revenue" radius={[10, 10, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          </div>
+
+          {/* MAIN LAYOUT */}
           <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-            {/* LEFT SIDE */}
+            {/* LEFT */}
             <div className="xl:col-span-2 space-y-6">
-              {/* INPUT PANEL */}
+              {/* INPUT */}
               <div className="bg-white/90 backdrop-blur-xl rounded-3xl shadow-sm border border-gray-200 p-5 sm:p-6">
                 <div className="flex items-center gap-2 mb-4">
                   <div className="w-10 h-10 rounded-2xl bg-blue-100 flex items-center justify-center text-lg">
@@ -216,22 +326,20 @@ function AISummaryPage() {
                   </div>
                   <div>
                     <h2 className="font-semibold text-gray-900">Ask your AI business assistant</h2>
-                    <p className="text-sm text-gray-500">Get quick, practical store advice</p>
+                    <p className="text-sm text-gray-500">Get practical advice instantly</p>
                   </div>
                 </div>
 
                 <div className="flex flex-col gap-3">
                   <div className="flex flex-col sm:flex-row gap-3">
-                    <div className="relative flex-1">
-                      <input
-                        type="text"
-                        placeholder="Ask about sales, stock, customers..."
-                        value={question}
-                        onChange={(e) => setQuestion(e.target.value)}
-                        onKeyDown={handleKeyDown}
-                        className="w-full border border-gray-200 rounded-2xl px-5 py-4 text-sm outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100 transition bg-gray-50"
-                      />
-                    </div>
+                    <input
+                      type="text"
+                      placeholder="Ask about sales, stock, customers..."
+                      value={question}
+                      onChange={(e) => setQuestion(e.target.value)}
+                      onKeyDown={handleKeyDown}
+                      className="flex-1 border border-gray-200 rounded-2xl px-5 py-4 text-sm outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100 transition bg-gray-50"
+                    />
 
                     <select
                       value={language}
@@ -248,18 +356,7 @@ function AISummaryPage() {
                       disabled={loading || !question.trim()}
                       className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:opacity-95 disabled:opacity-50 text-white text-sm font-semibold px-6 py-4 rounded-2xl transition whitespace-nowrap shadow-sm"
                     >
-                      {loading ? (
-                        <span className="flex items-center gap-2">
-                          <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none">
-                            <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeDasharray="60" strokeDashoffset="20" />
-                          </svg>
-                          Thinking...
-                        </span>
-                      ) : (
-                        <span className="flex items-center gap-2">
-                          ✨ Ask AI
-                        </span>
-                      )}
+                      {loading ? "Thinking..." : "✨ Ask AI"}
                     </button>
                   </div>
 
@@ -277,9 +374,7 @@ function AISummaryPage() {
                           }`}
                         />
                       </button>
-                      <span className="text-sm text-gray-500">
-                        🔊 Speak response aloud
-                      </span>
+                      <span className="text-sm text-gray-500">🔊 Speak response aloud</span>
                     </div>
 
                     <div className="text-xs text-gray-400 bg-gray-50 px-3 py-1.5 rounded-full border">
@@ -295,7 +390,7 @@ function AISummaryPage() {
                 </div>
               </div>
 
-              {/* CHAT AREA */}
+              {/* CHAT */}
               <div className="bg-white/90 backdrop-blur-xl rounded-3xl shadow-sm border border-gray-200 p-5 sm:p-6 min-h-[420px]">
                 <div className="flex items-center justify-between mb-5">
                   <div>
@@ -378,9 +473,8 @@ function AISummaryPage() {
               </div>
             </div>
 
-            {/* RIGHT SIDE PANEL */}
+            {/* RIGHT */}
             <div className="space-y-6">
-              {/* Quick prompts */}
               <div className="bg-white/90 backdrop-blur-xl rounded-3xl shadow-sm border border-gray-200 p-5">
                 <h3 className="text-lg font-semibold text-gray-900 mb-1">Quick Questions</h3>
                 <p className="text-sm text-gray-500 mb-4">Tap to ask common merchant questions</p>
@@ -399,29 +493,26 @@ function AISummaryPage() {
                 </div>
               </div>
 
-              {/* Suggested Actions */}
               <div className="bg-white/90 backdrop-blur-xl rounded-3xl shadow-sm border border-gray-200 p-5">
-                <h3 className="text-lg font-semibold text-gray-900 mb-1">Suggested Actions</h3>
-                <p className="text-sm text-gray-500 mb-4">Useful merchant-focused next steps</p>
+                <h3 className="text-lg font-semibold text-gray-900 mb-1">Store Snapshot</h3>
+                <p className="text-sm text-gray-500 mb-4">Quick business status overview</p>
 
                 <div className="space-y-3">
-                  {[
-                    "📦 Restock top-selling products",
-                    "🎯 Run offer for repeat customers",
-                    "⏰ Optimize staff during peak hour",
-                    "⭐ Improve service based on feedback",
-                  ].map((item) => (
-                    <div
-                      key={item}
-                      className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-100 rounded-2xl px-4 py-3 text-sm text-gray-700"
-                    >
-                      {item}
-                    </div>
-                  ))}
+                  <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-100 rounded-2xl px-4 py-3 text-sm text-gray-700">
+                    🏪 {analytics.merchantInfo.name || "Merchant Store"}
+                  </div>
+                  <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-100 rounded-2xl px-4 py-3 text-sm text-gray-700">
+                    📍 {analytics.merchantInfo.location || "Location not available"}
+                  </div>
+                  <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-100 rounded-2xl px-4 py-3 text-sm text-gray-700">
+                    ⚠️ {analytics.lowStockCount} low-stock items need attention
+                  </div>
+                  <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-100 rounded-2xl px-4 py-3 text-sm text-gray-700">
+                    📊 AI + Analytics enabled
+                  </div>
                 </div>
               </div>
 
-              {/* Voice info */}
               <div className="bg-gradient-to-br from-slate-900 to-slate-800 text-white rounded-3xl p-5 shadow-lg">
                 <div className="flex items-center gap-2 mb-3">
                   <div className="w-10 h-10 rounded-2xl bg-white/10 flex items-center justify-center">
@@ -435,7 +526,7 @@ function AISummaryPage() {
 
                 <p className="text-sm text-slate-300 leading-relaxed">
                   Your AI assistant can speak responses in the selected language,
-                  making it easier for local merchants to understand business insights quickly.
+                  making business insights more accessible for local merchants.
                 </p>
               </div>
             </div>
